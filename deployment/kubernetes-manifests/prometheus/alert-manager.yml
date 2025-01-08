@@ -25,7 +25,7 @@ spec:
       priorityClassName: system-cluster-critical
       containers:
         - name: prometheus-alertmanager
-          image: "prom/alertmanager:v0.14.0"
+          image: "prom/alertmanager:v0.25.0"
           imagePullPolicy: "IfNotPresent"
           args:
             - --config.file=/etc/config/alertmanager.yml
@@ -42,6 +42,8 @@ spec:
           volumeMounts:
             - name: config-volume
               mountPath: /etc/config
+            - name: alertmanager-data
+              mountPath: /data
           resources:
             limits:
               cpu: 10m
