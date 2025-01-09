@@ -186,3 +186,4 @@ continue_deployment
 wait_for_pods_ready $namespace
 patch_tt_mysql
 complete_deployment
+wait_for_pods_ready $namespace
