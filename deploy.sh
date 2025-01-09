@@ -163,12 +163,14 @@ function complete_deployment {
   # update_tt_dp_cm $nacosRelease $rabbitmqRelease
   # kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/deploy.yaml -n $namespace > /dev/null
 
-  echo "Deploying train-ticket deployments with skywalking agent..."
-  update_tt_sw_dp_cm $nacosRelease $rabbitmqRelease
-  kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/sw_deploy.yaml -n $namespace > /dev/null
+  # Skywalking-ui is getting OOMKilled, might be issues with old image
+  # I'm just commenting out for now since I'm not sure if we need it at all since we have prometheus and grafana
+  # echo "Deploying train-ticket deployments with skywalking agent..."
+  # update_tt_sw_dp_cm $nacosRelease $rabbitmqRelease
+  # kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/sw_deploy.yaml -n $namespace > /dev/null
 
-  echo "Start deploy skywalking"
-  kubectl apply -f deployment/kubernetes-manifests/skywalking -n $namespace
+  # echo "Start deploy skywalking"
+  # kubectl apply -f deployment/kubernetes-manifests/skywalking -n $namespace
 
   echo "Start deploy prometheus and grafana"
   kubectl apply -f deployment/kubernetes-manifests/prometheus
