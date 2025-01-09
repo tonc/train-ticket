@@ -30,12 +30,16 @@ namespace=${1:-default}
 function wait_for_pods_ready {
   local namespace=$1
   echo "Waiting for all pods in namespace '$namespace' to be ready..."
+
   while true; do
-    non_ready_pods=$(kubectl get pods -n "$namespace" --no-headers | grep -vE 'Running|Completed' | wc -l)
+    # Check the 'READY' column for pods that are not fully ready
+    non_ready_pods=$(kubectl get pods -n "$namespace" --no-headers | awk '{split($2,a,"/"); if (a[1] != a[2]) print $1}' | wc -l)
+
     if [ "$non_ready_pods" -eq 0 ]; then
       echo "All pods in namespace '$namespace' are ready."
       break
     fi
+
     echo "$non_ready_pods pod(s) are not ready yet. Checking again in 10 seconds..."
     sleep 10
   done
@@ -124,13 +128,32 @@ EOF
 # Step 6: Complete deployment of Train Ticket services
 function complete_deployment {
   echo "Completing deployment of Train Ticket services..."
-  gen_secret_for_services
+
+  # Apply MySQL secrets
+  echo "Applying MySQL secrets for Train Ticket services..."
   kubectl apply -f $secret_yaml
+
+  # Apply service configurations
+  echo "Applying service configurations..."
   kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/svc.yaml -n $namespace
-  cp $sw_dp_sample_yaml $sw_dp_yaml
+
+  # Update and apply Skywalking deployment configuration
+  echo "Updating Skywalking deployment configuration..."
+  update_tt_sw_dp_cm $nacosRelease $rabbitmqRelease
   kubectl apply -f $sw_dp_yaml -n $namespace
+
+  # Deploy Skywalking
+  echo "Deploying Skywalking..."
   kubectl apply -f deployment/kubernetes-manifests/skywalking -n kube-system
+
+  # Deploy Prometheus and Grafana
+  echo "Deploying Prometheus and Grafana..."
   kubectl apply -f deployment/kubernetes-manifests/prometheus -n kube-system
+
+  # Wait for all pods to be ready
+  echo "Waiting for all pods to be ready in namespace '$namespace'..."
+  wait_for_pods_ready $namespace
+
   echo "Deployment complete!"
 }
 
