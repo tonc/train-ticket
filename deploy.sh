@@ -67,27 +67,18 @@ function patch_nacos_mysql {
 
 # Step 3: Deploy MySQL for Train Ticket services
 function continue_deployment {
-  echo "Start deployment Step <2/3>: Deploying services----------------------"
-  
-  # Deploy Nacos
   echo "Start to deploy nacos."
   helm install $nacosRelease --set nacos.db.host=$nacosDBHost --set nacos.db.username=$nacosDBUser --set nacos.db.name=$nacosDBName --set nacos.db.password=$nacosDBPass $nacosCharts -n $namespace
   echo "Waiting for nacos to be ready ......"
   kubectl rollout status statefulset/$nacosRelease -n $namespace
-  
-  # Deploy RabbitMQ
   echo "Start to deploy rabbitmq."
   helm install $rabbitmqRelease $rabbitmqCharts -n $namespace
   echo "Waiting for rabbitmq to be ready ......"
   kubectl rollout status deployment/$rabbitmqRelease -n $namespace
-  
-  # Deploy MySQL for Train Ticket services
   echo "Start deployment Step <2/3>: mysql cluster of train-ticket services----------------------"
-  helm install $tsMysqlName --set mysql.mysqlUser=$tsUser --set mysql.mysqlPassword=$tsPassword --set mysql.mysqlDatabase=$tsDB $mysqlCharts -n $namespace
+  helm install $tsMysqlName --set mysql.mysqlUser=$tsUser --set mysql.mysqlPassword=$tsPassword --set mysql.mysqlDatabase=$tsDB $mysqlCharts -n $namespace 1>/dev/null
   echo "Waiting for mysql cluster of train-ticket to be ready ......"
   kubectl rollout status statefulset/${tsMysqlName}-mysql -n $namespace
-  
-  # Generate secrets for Train Ticket services
   gen_secret_for_services $tsUser $tsPassword $tsDB "${tsMysqlName}-mysql-leader"
   echo "End deployment Step <2/3>-----------------------------------------------------------------"
 }
@@ -102,59 +93,87 @@ function patch_tt_mysql {
   wait_for_pods_ready $namespace
 }
 
-# Step 5: Generate MySQL secrets for Train Ticket services
-function gen_secret_for_services {
-  echo "Generating secrets for Train Ticket services..."
-  rm -f $secret_yaml && touch $secret_yaml
-  for s in $svc_list; do
-    cat >> $secret_yaml <<EOF
+function gen_secret_for_tt {
+  s="$1"
+  name="ts-$s-mysql"
+  hostVal="$2"
+  userVal="$3"
+  passVal="$4"
+  dbVal="$5"
+
+  prefix=`echo "${s}-mysql-" | tr '-' '_' | tr a-z A-Z`
+  host=$prefix"HOST"
+  port=$prefix"PORT"
+  database=$prefix"DATABASE"
+  user=$prefix"USER"
+  pwd=$prefix"PASSWORD"
+
+  cat>>$secret_yaml<<EOF
 apiVersion: v1
 kind: Secret
 metadata:
-  name: ts-$s-mysql
-  namespace: $namespace
+  name: $name
 type: Opaque
 stringData:
-  ${s^^}_HOST: "ts-$s-mysql-leader"
-  ${s^^}_PORT: "3306"
-  ${s^^}_DATABASE: "$tsDB"
-  ${s^^}_USER: "$tsUser"
-  ${s^^}_PASSWORD: "$tsPassword"
+  $host: "$hostVal"
+  $port: "3306"
+  $database: "$dbVal"
+  $user: "$userVal"
+  $pwd: "$passVal"
 ---
 EOF
+}
+
+function gen_secret_for_services {
+  mysqlUser="$1"
+  mysqlPassword="$2"
+  mysqlDatabase="$3"
+  mysqlHost=""
+  useOneHost=0
+
+  if [ $# == 4 ]; then
+    mysqlHost="$4"
+    useOneHost=1
+  fi
+  rm $secret_yaml > /dev/null 2>&1
+  touch $secret_yaml
+  for s in $svc_list
+  do
+    if [ useOneHost == 0 ]; then
+      mysqlHost="ts-$s-mysql-leader"
+    fi
+    gen_secret_for_tt $s $mysqlHost $mysqlUser $mysqlPassword $mysqlDatabase
   done
 }
 
 # Step 6: Complete deployment of Train Ticket services
 function complete_deployment {
-  echo "Completing deployment of Train Ticket services..."
+  echo "Start deployment Step <3/3>: train-ticket services--------------------------------------------"
+  echo "Start to deploy secret of train-ticket services."
+  kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/secret.yaml -n $namespace > /dev/null
 
-  # Apply MySQL secrets
-  echo "Applying MySQL secrets for Train Ticket services..."
-  kubectl apply -f $secret_yaml
+  echo "Deploying service configurations..."
+  kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/svc.yaml -n $namespace > /dev/null
 
-  # Apply service configurations
-  echo "Applying service configurations..."
-  kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/svc.yaml -n $namespace
+  echo "sw_dp_sample_yaml: $sw_dp_sample_yaml"
+  echo "sw_dp_yaml: $sw_dp_yaml"
 
-  # Update and apply Skywalking deployment configuration
-  echo "Updating Skywalking deployment configuration..."
+
+  # echo "Deploying train-ticket deployments..."
+  # update_tt_dp_cm $nacosRelease $rabbitmqRelease
+  # kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/deploy.yaml -n $namespace > /dev/null
+
+  echo "Deploying train-ticket deployments with skywalking agent..."
   update_tt_sw_dp_cm $nacosRelease $rabbitmqRelease
-  kubectl apply -f $sw_dp_yaml -n $namespace
+  kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/sw_deploy.yaml -n $namespace > /dev/null
 
-  # Deploy Skywalking
-  echo "Deploying Skywalking..."
-  kubectl apply -f deployment/kubernetes-manifests/skywalking -n kube-system
+  echo "Start deploy skywalking"
+  kubectl apply -f deployment/kubernetes-manifests/skywalking -n $namespace
 
-  # Deploy Prometheus and Grafana
-  echo "Deploying Prometheus and Grafana..."
-  kubectl apply -f deployment/kubernetes-manifests/prometheus -n kube-system
-
-  # Wait for all pods to be ready
-  echo "Waiting for all pods to be ready in namespace '$namespace'..."
-  wait_for_pods_ready $namespace
-
-  echo "Deployment complete!"
+  echo "Start deploy prometheus and grafana"
+  kubectl apply -f deployment/kubernetes-manifests/prometheus
+  
+  echo "End deployment Step <3/3>----------------------------------------------------------------------"
 }
 
 # Main script execution
