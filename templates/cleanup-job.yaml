@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cleanup-job
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-1"
+spec:
+  template:
+    spec:
+      serviceAccountName: train-ticket-deploy-sa
+      containers:
+        - name: cleanup
+          image: bitnami/kubectl:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              #!/bin/sh
+              echo "Cleaning up resources in namespace: $NAMESPACE..."
+
+              # Delete all resources
+              kubectl delete all --all -n $NAMESPACE --wait=false
+
+              # Delete configmaps
+              kubectl delete configmaps --all -n $NAMESPACE --wait=false
+
+              # Delete secrets
+              kubectl delete secrets --all -n $NAMESPACE --wait=false
+
+              echo "Waiting for resources to terminate..."
+              while kubectl get all -n $NAMESPACE --no-headers | grep -q .; do
+                echo "Resources still exist. Waiting..."
+                sleep 5
+              done
+
+              echo "Cleanup complete."
+      restartPolicy: Never
+  backoffLimit: 1
