@@ -1,0 +1,18 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: train-ticket-deploy
+  namespace: {{ .Values.namespace }}
+spec:
+  template:
+    spec:
+      serviceAccountName: train-ticket-deploy-sa
+      containers:
+        - name: train-ticket-deploy
+          image: jacksonarthurclark/train-ticket-deploy:latest
+          # imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
+          env:
+            - name: NAMESPACE
+              value: "{{ .Values.namespace }}"
+      restartPolicy: OnFailure
