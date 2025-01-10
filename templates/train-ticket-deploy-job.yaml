@@ -10,8 +10,7 @@ spec:
       containers:
         - name: train-ticket-deploy
           image: jacksonarthurclark/train-ticket-deploy:latest
-          # imagePullPolicy: IfNotPresent
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           env:
             - name: NAMESPACE
               value: "{{ .Values.namespace }}"
