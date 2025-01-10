@@ -26,6 +26,17 @@ sw_dp_yaml="deployment/kubernetes-manifests/quickstart-k8s/yamls/sw_deploy.yaml"
 # Get the namespace from command line argument or set to "default" if not provided
 namespace=${1:-default}
 
+# Debug: Check if the charts exist
+if [ ! -d "$mysqlCharts" ]; then
+  echo "Error: MySQL charts directory not found at $mysqlCharts"
+fi
+if [ ! -d "$nacosCharts" ]; then
+  echo "Error: Nacos charts directory not found at $nacosCharts"
+fi
+
+# Debug before running any command that depends on the working directory
+echo "Before deploying Nacos. Current working directory: $(pwd)"
+
 # Utility function to wait for all pods in a namespace to be ready
 function wait_for_pods_ready {
   local namespace=$1
@@ -146,6 +157,21 @@ function gen_secret_for_services {
   done
 }
 
+function update_tt_dp_cm {
+  nacosCM="$1"
+  rabbitmqCM="$2"
+
+  cp $dp_sample_yaml $dp_yaml
+
+  if [[ "$(uname)" == "Darwin" ]]; then
+    sed -i "" "s/nacos/${nacosCM}/g" $dp_yaml
+    sed -i "" "s/rabbitmq/${rabbitmqCM}/g" $dp_yaml
+  else
+    sed -i "s/nacos/${nacosCM}/g" $dp_yaml
+    sed -i "s/rabbitmq/${rabbitmqCM}/g" $dp_yaml
+  fi
+}
+
 # Step 6: Complete deployment of Train Ticket services
 function complete_deployment {
   echo "Start deployment Step <3/3>: train-ticket services--------------------------------------------"
@@ -160,11 +186,12 @@ function complete_deployment {
 
 
   # echo "Deploying train-ticket deployments..."
-  # update_tt_dp_cm $nacosRelease $rabbitmqRelease
-  # kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/deploy.yaml -n $namespace > /dev/null
+  update_tt_dp_cm $nacosRelease $rabbitmqRelease
+  kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/deploy.yaml -n $namespace > /dev/null
 
   # Skywalking-ui is getting OOMKilled, might be issues with old image
   # I'm just commenting out for now since I'm not sure if we need it at all since we have prometheus and grafana
+
   # echo "Deploying train-ticket deployments with skywalking agent..."
   # update_tt_sw_dp_cm $nacosRelease $rabbitmqRelease
   # kubectl apply -f deployment/kubernetes-manifests/quickstart-k8s/yamls/sw_deploy.yaml -n $namespace > /dev/null
