@@ -18,22 +18,55 @@ spec:
             - -c
             - |
               #!/bin/sh
-              echo "Cleaning up resources in namespace: $NAMESPACE..."
+              echo "Starting cleanup for Train Ticket resources in namespace: {{ .Release.Namespace }}..."
 
-              # Delete all resources
-              kubectl delete all --all -n $NAMESPACE --wait=false
+              # Set the namespace variable
+              NAMESPACE="{{ .Release.Namespace }}"
+
+              # Delete deployments
+              echo "Deleting deployments..."
+              kubectl delete deployments --all -n $NAMESPACE --wait=false
+
+              # Delete services
+              echo "Deleting services..."
+              kubectl delete services --all -n $NAMESPACE --wait=false
+
+              # Delete statefulsets
+              echo "Deleting statefulsets..."
+              kubectl delete statefulsets --all -n $NAMESPACE --wait=false
+
+              # Delete daemonsets
+              echo "Deleting daemonsets..."
+              kubectl delete daemonsets --all -n $NAMESPACE --wait=false
 
               # Delete configmaps
+              echo "Deleting configmaps..."
               kubectl delete configmaps --all -n $NAMESPACE --wait=false
 
               # Delete secrets
+              echo "Deleting secrets..."
               kubectl delete secrets --all -n $NAMESPACE --wait=false
 
+              # Delete persistent volume claims
+              echo "Deleting persistent volume claims..."
+              kubectl delete pvc --all -n $NAMESPACE --wait=false
+
+              # Wait for resources to terminate, excluding jobs
               echo "Waiting for resources to terminate..."
-              while kubectl get all -n $NAMESPACE --no-headers | grep -q .; do
+              while true; do
+                remaining_resources=$(kubectl get all -n $NAMESPACE --no-headers | grep -vE '(job.batch/cleanup-job|job.batch/train-ticket-deploy|pod/cleanup-job|pod/train-ticket-deploy)')
+                if [ -z "$remaining_resources" ]; then
+                  echo "No remaining resources. Exiting cleanup loop."
+                  break
+                fi
                 echo "Resources still exist. Waiting..."
+                echo "$remaining_resources"
                 sleep 5
               done
+
+              echo "Deleting completed jobs..."
+              kubectl delete job train-ticket-deploy -n $NAMESPACE --ignore-not-found
+              kubectl delete job cleanup-job -n $NAMESPACE --ignore-not-found
 
               echo "Cleanup complete."
       restartPolicy: Never
