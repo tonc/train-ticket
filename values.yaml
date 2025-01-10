@@ -1,0 +1,4 @@
+namespace: train-ticket
+job:
+  image: jacksonarthurclark/train-ticket-deploy:latest
+  imagePullPolicy: IfNotPresent
